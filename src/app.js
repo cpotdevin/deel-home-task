@@ -128,4 +128,52 @@ app.post('/jobs/:id/pay', getProfile, async (req, res) => {
   return null;
 });
 
+app.get('/admin/best-profession', getProfile, async (req, res) => {
+  const { Job, Contract, Profile } = req.app.get('models');
+  const { start: startString, end: endString } = req.query;
+  const start = new Date(startString);
+  const end = new Date(endString);
+
+  // eslint-disable-next-line no-self-compare
+  if (end.getTime() !== end.getTime() || start.getTime() !== start.getTime()) {
+    return res.status(409).end();
+  }
+
+  const result = await Job.findAll({
+    attributes: [[sequelize.fn('sum', sequelize.col('price')), 'moneyEarned']],
+    where: {
+      paid: true,
+      paymentDate: {
+        [Sequelize.Op.and]: [
+          { [Sequelize.Op.gte]: start },
+          { [Sequelize.Op.lte]: end },
+        ],
+      },
+    },
+    include: {
+      model: Contract,
+      required: true,
+      attributes: ['ContractorId'],
+      include: {
+        model: Profile,
+        as: 'Contractor',
+        foreignKey: 'ContractorId',
+        required: true,
+        attributes: ['profession'],
+      },
+    },
+    group: 'Contract.Contractor.profession',
+    order: [[Sequelize.col('moneyEarned'), 'DESC']],
+    limit: 1,
+  });
+
+  if (result.length === 0) {
+    res.json('');
+  } else {
+    res.json(result[0].Contract.Contractor.profession);
+  }
+
+  return null;
+});
+
 module.exports = app;
