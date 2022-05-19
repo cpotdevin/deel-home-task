@@ -41,8 +41,6 @@ app.get('/contracts', getProfile, async (req, res) => {
   });
 
   res.json(contracts);
-
-  return null;
 });
 
 app.get('/jobs/unpaid', getProfile, async (req, res) => {
@@ -65,6 +63,67 @@ app.get('/jobs/unpaid', getProfile, async (req, res) => {
   });
 
   res.json(unpaidJobs);
+});
+
+app.post('/jobs/:id/pay', getProfile, async (req, res) => {
+  const { Profile, Job, Contract } = req.app.get('models');
+  const { id } = req.params;
+
+  const transaction = await sequelize.transaction();
+
+  try {
+    const job = await Job.findOne({
+      transaction,
+      where: { id },
+      include: {
+        model: Contract,
+        required: true,
+      },
+    });
+    const client = await Profile.findOne({
+      transaction,
+      where: { id: req.profile.id },
+    });
+    const contractor = await Profile.findOne({
+      transaction,
+      where: { id: job.Contract.ContractorId },
+    });
+
+    if (!job) {
+      return res.status(404).end();
+    }
+
+    if (job.Contract.ClientId !== req.profile.id) {
+      return res.status(403).end();
+    }
+
+    if (job.price > client.balance) {
+      return res.status(409).end();
+    }
+
+    if (job.paid) {
+      return res.status(409).end();
+    }
+
+    await client.decrement('balance', {
+      by: job.price,
+      transaction,
+    });
+    await contractor.increment('balance', {
+      by: job.price,
+      transaction,
+    });
+    const paidJob = await job.update(
+      { paid: true, paymentDate: Date.now() },
+      { transaction },
+    );
+
+    await transaction.commit();
+
+    res.json(paidJob);
+  } catch (error) {
+    await transaction.rollback();
+  }
 
   return null;
 });
