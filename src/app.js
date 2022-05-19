@@ -128,7 +128,7 @@ app.post('/jobs/:id/pay', getProfile, async (req, res) => {
   return null;
 });
 
-app.get('/admin/best-profession', getProfile, async (req, res) => {
+app.get('/admin/best-profession', async (req, res) => {
   const { Job, Contract, Profile } = req.app.get('models');
   const { start: startString, end: endString } = req.query;
   const start = new Date(startString);
@@ -172,6 +172,57 @@ app.get('/admin/best-profession', getProfile, async (req, res) => {
   } else {
     res.json(result[0].Contract.Contractor.profession);
   }
+
+  return null;
+});
+
+app.get('/admin/best-clients', async (req, res) => {
+  const { Job, Contract, Profile } = req.app.get('models');
+  const { start: startString, end: endString, limit: limitString } = req.query;
+  const start = new Date(startString);
+  const end = new Date(endString);
+  const limit = Number.parseInt(limitString, 10) || 2;
+
+  // eslint-disable-next-line no-self-compare
+  if (end.getTime() !== end.getTime() || start.getTime() !== start.getTime()) {
+    return res.status(409).end();
+  }
+
+  const result = await Job.findAll({
+    limit,
+    attributes: [[sequelize.fn('sum', sequelize.col('price')), 'moneyPaid']],
+    where: {
+      paid: true,
+      paymentDate: {
+        [Sequelize.Op.and]: [
+          { [Sequelize.Op.gte]: start },
+          { [Sequelize.Op.lte]: end },
+        ],
+      },
+    },
+    include: {
+      model: Contract,
+      required: true,
+      attributes: ['ClientId'],
+      include: {
+        model: Profile,
+        as: 'Client',
+        foreignKey: 'ClientId',
+        required: true,
+        attributes: ['firstName', 'lastName'],
+      },
+    },
+    group: 'Contract.ClientId',
+    order: [[Sequelize.col('moneyPaid'), 'DESC']],
+  });
+
+  res.json(
+    result.map((item) => ({
+      id: item.Contract.ClientId,
+      fullName: `${item.Contract.Client.firstName} ${item.Contract.Client.lastName}`,
+      paid: item.dataValues.moneyPaid,
+    })),
+  );
 
   return null;
 });
