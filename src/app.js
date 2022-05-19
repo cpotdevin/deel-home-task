@@ -1,5 +1,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const Sequelize = require('sequelize');
 const { sequelize } = require('./model');
 const { getProfile } = require('./middleware/getProfile');
 
@@ -25,6 +26,21 @@ app.get('/contracts/:id', getProfile, async (req, res) => {
   }
 
   res.json(contract);
+
+  return null;
+});
+
+app.get('/contracts', getProfile, async (req, res) => {
+  const { Contract } = req.app.get('models');
+  const { id } = req.profile;
+  const contracts = await Contract.findAll({
+    where: {
+      status: { [Sequelize.Op.not]: 'terminated' },
+      [Sequelize.Op.or]: [{ ClientId: id }, { ContractorId: id }],
+    },
+  });
+
+  res.json(contracts);
 
   return null;
 });
