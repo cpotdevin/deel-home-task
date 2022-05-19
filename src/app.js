@@ -128,6 +128,50 @@ app.post('/jobs/:id/pay', getProfile, async (req, res) => {
   return null;
 });
 
+app.post('/balances/deposit/:id', async (req, res) => {
+  const { Job, Contract, Profile } = req.app.get('models');
+  const { amount } = req.body;
+  const { id } = req.params;
+
+  if (typeof amount !== 'number') {
+    return res.status(400).end();
+  }
+
+  const result = await Job.findOne({
+    attributes: [[sequelize.fn('sum', sequelize.col('price')), 'unpaidAmount']],
+    where: {
+      paid: false,
+    },
+    include: {
+      model: Contract,
+      required: true,
+      attributes: [],
+      where: {
+        status: 'in_progress',
+        ClientId: id,
+      },
+    },
+    joinTableAttributes: [],
+    group: 'Contract.ClientId',
+  });
+
+  const { unpaidAmount } = result.dataValues;
+
+  if (amount > 0.25 * unpaidAmount) {
+    return res.status(409).end();
+  }
+
+  const client = await Profile.findOne({ where: { id } });
+
+  await client.increment({ balance: amount });
+
+  const clientResult = await Profile.findOne({ where: { id } });
+
+  res.json(clientResult);
+
+  return null;
+});
+
 app.get('/admin/best-profession', async (req, res) => {
   const { Job, Contract, Profile } = req.app.get('models');
   const { start: startString, end: endString } = req.query;
