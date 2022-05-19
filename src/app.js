@@ -45,4 +45,28 @@ app.get('/contracts', getProfile, async (req, res) => {
   return null;
 });
 
+app.get('/jobs/unpaid', getProfile, async (req, res) => {
+  const { Job, Contract } = req.app.get('models');
+  const { id } = req.profile;
+  const unpaidJobs = await Job.findAll({
+    where: {
+      paid: false,
+    },
+    include: {
+      model: Contract,
+      required: true,
+      attributes: [],
+      where: {
+        status: 'in_progress',
+        [Sequelize.Op.or]: [{ ClientId: id }, { ContractorId: id }],
+      },
+    },
+    joinTableAttributes: [],
+  });
+
+  res.json(unpaidJobs);
+
+  return null;
+});
+
 module.exports = app;
